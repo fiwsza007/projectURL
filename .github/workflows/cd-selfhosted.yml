@@ -1,0 +1,39 @@
+name: CD - Deploy to Docker Desktop (Self-Hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Docker image tag (e.g., latest or short SHA)"
+        required: true
+        default: "latest"
+
+env:
+  IMAGE_NAME: fiwsza007/url-shortener
+  K8S_NAMESPACE: url-shortener
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ใช้ kubeconfig ของเครื่อง self-hosted runner ที่ตั้งค่า kubectl ไว้แล้ว
+      - name: Ensure namespace exists
+        run: kubectl apply -f k8s/namespace.yaml
+
+      - name: Apply secret
+        run: kubectl apply -f k8s/secret.yaml
+
+      - name: Apply deployment and service
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+
+      - name: Update image to requested tag
+        run: |
+          kubectl set image deployment/url-shortener-depl app=${{ env.IMAGE_NAME }}:${{ inputs.tag }} -n ${{ env.K8S_NAMESPACE }}
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/url-shortener-depl -n ${{ env.K8S_NAMESPACE }}
